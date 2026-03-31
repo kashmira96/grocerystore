@@ -1,15 +1,23 @@
 /* eslint-env serviceworker */
 /* global self */
+
 const CACHE_NAME = 'greenbasket-cache-v1';
+
+// ✅ Use PUBLIC_URL base path
+const BASE_URL = self.location.pathname.includes('/grocerystore')
+  ? '/grocerystore'
+  : '';
+
 const PRECACHE_URLS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/favicon.ico',
-  '/logo192.png',
-  '/logo512.png'
+  BASE_URL + '/',
+  BASE_URL + '/index.html',
+  BASE_URL + '/manifest.json',
+  BASE_URL + '/favicon.ico',
+  BASE_URL + '/logo192.png',
+  BASE_URL + '/logo512.png'
 ];
 
+// INSTALL
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -19,6 +27,7 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
+// ACTIVATE
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -32,33 +41,31 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// FETCH
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
-  if (request.method !== 'GET') {
-    return;
-  }
+  if (request.method !== 'GET') return;
 
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
+      return (
+        cachedResponse ||
+        fetch(request)
+          .then((networkResponse) => {
+            if (!networkResponse || networkResponse.status !== 200) {
+              return networkResponse;
+            }
 
-      return fetch(request)
-        .then((networkResponse) => {
-          if (!networkResponse || networkResponse.status !== 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, responseClone);
+            });
+
             return networkResponse;
-          }
-
-          const responseClone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseClone);
-          });
-
-          return networkResponse;
-        })
-        .catch(() => caches.match('/'));
+          })
+          .catch(() => caches.match(BASE_URL + '/'))
+      );
     })
   );
 });
